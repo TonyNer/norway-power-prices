@@ -10,8 +10,26 @@ type ApiPrice = {
 };
 
 async function fetchPrices(): Promise<void> {
-  const zone = process.env.ZONE || "NO4";
-  const url = `https://www.hvakosterstrommen.no/api/v1/prices/current?sone=${encodeURIComponent(zone)}`;
+  const zone = (process.env.ZONE || "NO4").toUpperCase();
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Oslo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const parts = formatter.formatToParts(now);
+  const pick = (type: string) =>
+    parts.find(p => p.type === type)?.value ?? "";
+  const year = pick("year");
+  const month = pick("month");
+  const day = pick("day");
+
+  if (!year || !month || !day) {
+    throw new Error("Failed to derive Oslo date for price fetch");
+  }
+
+  const url = `https://www.hvakosterstrommen.no/api/v1/prices/${year}/${month}-${day}_${zone}.json`;
 
   let data: unknown;
   try {
