@@ -53,23 +53,21 @@ const FETCH_INTERVAL_MS = Math.max(
 let fetchInFlight = false;
 let startupPriceChecked = false;
 
-async function maybeNotifyPriceStatus(): Promise<void> {
+async function maybeNotifyHighPrice(): Promise<void> {
   if (startupPriceChecked) return;
   const next = getNextRows(Math.floor(Date.now() / 1000), 1)[0];
   if (!next) return;
   startupPriceChecked = true;
 
+  if (next.price <= priceThreshold) return;
+
   const start = new Date(next.ts_start * 1000);
   const end = new Date(next.ts_end * 1000);
-
-  const isLow = next.price < priceThreshold;
-  const title = isLow ? "✅ *Low Price Alert*" : "⚠️ *High Price Alert*";
-  const comparison = isLow ? "below" : "above";
   const msg = [
-    title,
+    "⚠️ *High Price Alert*",
     `Next hour: *${next.price.toFixed(2)} NOK/kWh*`,
     `Period: ${start.toLocaleString()} → ${end.toLocaleTimeString()}`,
-    `Compared to threshold (${priceThreshold.toFixed(2)} NOK/kWh): ${comparison}`
+    `Above threshold (${priceThreshold.toFixed(2)} NOK/kWh)`
   ].join("\n");
 
   try {
@@ -84,7 +82,7 @@ async function runFetchCycle(): Promise<void> {
   fetchInFlight = true;
   try {
     await fetchPrices();
-    await maybeNotifyPriceStatus();
+    await maybeNotifyHighPrice();
   } catch (err) {
     console.error("Price fetch failed", err);
   } finally {
