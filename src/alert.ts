@@ -1,4 +1,3 @@
-// src/alert.ts
 import dotenv from "dotenv";
 import { getNextRows } from "./db.js";
 import { sendTelegram } from "./telegram.js";

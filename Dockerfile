@@ -1,10 +1,10 @@
-# Dockerfile
 FROM node:20
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN node -e "require('./package.json'); console.log('package.json OK')" \
+ && npm install
 
 COPY . .
 

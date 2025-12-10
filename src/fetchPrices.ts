@@ -1,4 +1,3 @@
-// src/fetchPrices.ts
 import fetch from "node-fetch";
 import dotenv from "dotenv";
 import { insertPrice } from "./db.js";
@@ -6,7 +5,7 @@ dotenv.config();
 
 type ApiPrice = {
   NOK_per_kWh: number;
-  time_start: string; // e.g. "2025-12-09T08:00:00+01:00"
+  time_start: string;
   time_end: string;
 };
 

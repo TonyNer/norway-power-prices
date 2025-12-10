@@ -4,8 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Norway Power (NO4)</title>
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <title>NO4 Electricity Prices</title>
   <style>
     :root { --pad: 16px; --max: 980px; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
     body { margin: 0; background: #0b0e13; color: #e9eef5; }
@@ -15,10 +14,10 @@
     .card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: var(--pad); }
     .grid { display: grid; gap: var(--pad); grid-template-columns: 1fr; }
     @media (min-width: 900px){ .grid { grid-template-columns: 2fr 1fr; } }
-    .meta { display: grid; gap: 8px; }
     .pill { display:inline-block; padding: 4px 10px; border-radius: 999px; background:#1f2937; }
     canvas { width: 100%; height: 340px; }
     a { color: #8ab4ff; }
+    ul { list-style: none; padding-left: 0; margin: 0; }
   </style>
 </head>
 <body>
@@ -32,31 +31,29 @@
     <h2 style="margin-top:0">Next 12 Hours</h2>
     <canvas id="chart"></canvas>
     <div style="font-size:.9rem;opacity:.8">
-      Threshold: <strong id="threshold">—</strong> NOK/kWh
+      Threshold: <strong id="threshold">1.00</strong> NOK/kWh
     </div>
   </section>
-  <aside class="card meta">
-    <div>
-      <strong>Next hour</strong>
-      <div id="nextHour">—</div>
-    </div>
-    <div>
+  <aside class="card">
+    <div><strong>Next hour</strong> <div id="nextHour">—</div></div>
+    <div style="margin-top:10px">
       <strong>Latest 24 entries</strong>
-      <ul id="latest" style="list-style:none;padding-left:0;margin:6px 0 0 0; max-height:240px; overflow:auto;"></ul>
+      <ul id="latest" style="max-height:240px; overflow:auto;"></ul>
     </div>
-    <div style="opacity:.7">API: <a href="/api/forecast?hours=12">/api/forecast</a></div>
+    <div style="opacity:.7;margin-top:10px">API: <a href="/api/forecast?hours=12">/api/forecast</a></div>
   </aside>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
-(async function main(){
+(async function(){
   const status = document.getElementById('status');
   const thresholdEl = document.getElementById('threshold');
   const nextHourEl = document.getElementById('nextHour');
   const latestEl = document.getElementById('latest');
 
-  const threshold = Number((new URLSearchParams(location.search)).get("threshold")) || Number("<?=process.env.PRICE_THRESHOLD||''?>") || 1.0;
+  const urlT = new URL(location.href);
+  const threshold = Number(urlT.searchParams.get("threshold") || "1.0") || 1.0;
   thresholdEl.textContent = threshold.toFixed(2);
 
   try {
@@ -66,24 +63,21 @@
     ]);
     const [forecast, latest] = await Promise.all([forecastRes.json(), latestRes.json()]);
 
-    // Next hour label
     if (forecast[0]) {
-      const s = new Date(forecast[0].time_start);
-      const e = new Date(forecast[0].time_end);
+      const s = new Date(forecast[0].ts_start * 1000);
+      const e = new Date(forecast[0].ts_end * 1000);
       nextHourEl.textContent = `${s.toLocaleString()} → ${e.toLocaleTimeString()} — ${forecast[0].price.toFixed(2)} NOK/kWh`;
     } else {
       nextHourEl.textContent = 'No upcoming data.';
     }
 
-    // Latest list
     latestEl.innerHTML = latest.map(r => {
-      const d = new Date(r.time_start);
-      return `<li>${d.toLocaleString()} — <strong>${r.price.toFixed(2)}</strong> NOK/kWh</li>`;
+      const d = new Date(r.ts_start * 1000);
+      return `<li>${d.toLocaleString()} — <strong>${Number(r.price).toFixed(2)}</strong> NOK/kWh</li>`;
     }).join('');
 
-    // Chart
     const ctx = document.getElementById('chart');
-    const labels = forecast.map(r => new Date(r.time_start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+    const labels = forecast.map(r => new Date(r.ts_start * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
     const values = forecast.map(r => r.price);
     const lineColor = values.map(v => v > threshold ? 'rgba(239,68,68,0.9)' : 'rgba(59,130,246,0.9)');
 
@@ -105,19 +99,8 @@
       },
       options: {
         responsive: true,
-        plugins: {
-          legend: { display: true },
-          tooltip: { mode: 'index', intersect: false }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            title: { display: true, text: 'NOK/kWh' }
-          },
-          x: {
-            title: { display: true, text: 'Hour' }
-          }
-        }
+        plugins: { legend: { display: true }, tooltip: { mode: 'index', intersect: false } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: 'NOK/kWh' } }, x: { title: { display: true, text: 'Hour' } } }
       }
     });
 
