@@ -1,19 +1,12 @@
+import axios from "axios";
 import { savePrice } from "./db.js";
 
-export async function fetchAndStorePrices() {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
+export async function fetchPrices() {
+  const { data } = await axios.get("https://norway-power.com/api/v1/prices");
 
-  const url = `https://www.hvakosterstrommen.no/api/v1/prices/${year}/${month}-${day}_NO5.json`;
-
-  const res = await fetch(url);
-  const data: any[] = await res.json(); // FIXED
-
-  for (const entry of data) {
-    savePrice(entry);
+  for (const price of data) {
+    await savePrice(price);
   }
 
-  console.log(`Saved ${data.length} hourly prices`);
+  return data;
 }

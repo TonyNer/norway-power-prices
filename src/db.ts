@@ -1,15 +1,22 @@
-import Database from "better-sqlite3";
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
 
-const db = new Database("./prices.db");
+export async function openDb() {
+  return open({
+    filename: "prices.db",
+    driver: sqlite3.Database,
+  });
+}
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS prices (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  zone TEXT,
-  price REAL,
-  time_start TEXT,
-  time_end TEXT
-);
-`);
+export async function savePrice(priceData: any) {
+  const db = await openDb();
 
-export default db;
+  await db.run(
+    `INSERT INTO prices (time_start, time_end, price_nok, price_eur)
+     VALUES (?, ?, ?, ?)`,
+    priceData.time_start,
+    priceData.time_end,
+    priceData.NOK_per_kWh,
+    priceData.EUR_per_kWh
+  );
+}

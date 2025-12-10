@@ -1,18 +1,20 @@
-import express, { Request, Response } from "express";
-import db from "./db.js";
+import express from "express";
+import TelegramBot from "node-telegram-bot-api";
+import { fetchPrices } from "./fetchPrices.js";
 
 const app = express();
-app.use(express.static("public"));
 
-app.get("/api/prices", (req: Request, res: Response) => {
-  const rows = db.prepare(`
-    SELECT *
-    FROM prices
-    ORDER BY time_start DESC
-    LIMIT 24
-  `).all();
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN!, { polling: true });
 
-  res.json(rows);
+bot.on("message", (msg) => {
+  bot.sendMessage(msg.chat.id, "Welcome! Send /prices to get latest power prices.");
 });
 
-app.listen(3000, () => console.log("Server running on port 3000"));
+bot.onText(/\/prices/, async (msg) => {
+  const prices = await fetchPrices();
+  bot.sendMessage(msg.chat.id, JSON.stringify(prices, null, 2));
+});
+
+app.listen(3000, () => {
+  console.log("Server running on port 3000");
+});
