@@ -9,14 +9,14 @@ async function fetchPrices() {
   const url = `https://www.hvakosterstrommen.no/api/v1/prices/current?sone=${zone}`;
 
   const res = await fetch(url);
-  const data = await res.json();
+  const data: any[] = await res.json(); // FIXED
 
   const insert = db.prepare(`
     INSERT INTO prices (zone, price, time_start, time_end)
     VALUES (?, ?, ?, ?)
   `);
 
-  data.forEach((p: any) => {
+  data.forEach((p) => {
     insert.run(zone, p.NOK_per_kWh, p.time_start, p.time_end);
   });
 

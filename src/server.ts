@@ -1,10 +1,10 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import db from "./db.js";
 
 const app = express();
 app.use(express.static("public"));
 
-app.get("/api/prices", (req, res) => {
+app.get("/api/prices", (req: Request, res: Response) => {
   const rows = db.prepare(`
     SELECT *
     FROM prices
