@@ -3,19 +3,25 @@ import Database from "better-sqlite3";
 
 const db = new Database("./prices.db");
 
-// Schema with de-dup + indexes
 db.exec(`
 PRAGMA journal_mode = WAL;
 CREATE TABLE IF NOT EXISTS prices (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   zone TEXT NOT NULL,
   price REAL NOT NULL,
-  time_start TEXT NOT NULL,
-  time_end TEXT NOT NULL,
-  UNIQUE(zone, time_start)
+  time_start TEXT NOT NULL, -- original ISO with offset (display only)
+  time_end   TEXT NOT NULL, -- original ISO with offset (display only)
+  ts_start   INTEGER NOT NULL, -- epoch seconds UTC (for queries)
+  ts_end     INTEGER NOT NULL, -- epoch seconds UTC
+  UNIQUE(zone, ts_start)
 );
-CREATE INDEX IF NOT EXISTS idx_prices_time_start ON prices(time_start);
+CREATE INDEX IF NOT EXISTS idx_prices_ts_start ON prices(ts_start);
 `);
+
+// NOTE: if you had an older table w/o ts_* columns, uncomment the migration and run once.
+// try { db.exec(`ALTER TABLE prices ADD COLUMN ts_start INTEGER`); } catch {}
+// try { db.exec(`ALTER TABLE prices ADD COLUMN ts_end INTEGER`); } catch {}
+// db.exec(`CREATE INDEX IF NOT EXISTS idx_prices_ts_start ON prices(ts_start)`);
 
 export type PriceRow = {
   id: number;
@@ -23,26 +29,52 @@ export type PriceRow = {
   price: number;
   time_start: string;
   time_end: string;
+  ts_start: number;
+  ts_end: number;
 };
 
-export const insertPrice = db.prepare(
-  `INSERT OR IGNORE INTO prices (zone, price, time_start, time_end)
-   VALUES (?, ?, ?, ?)`
+const stmtInsert = db.prepare(
+  `INSERT OR IGNORE INTO prices
+   (zone, price, time_start, time_end, ts_start, ts_end)
+   VALUES (?, ?, ?, ?, ?, ?)`
 );
 
-export const getLatest = db.prepare<unknown[], PriceRow[]>(
-  `SELECT * FROM prices ORDER BY time_start DESC LIMIT ?`
+const stmtLatest = db.prepare(
+  `SELECT * FROM prices ORDER BY ts_start DESC LIMIT ?`
 );
 
-export const getNextRows = db.prepare<[string, number], PriceRow[]>(
+const stmtNextRows = db.prepare(
   `SELECT * FROM prices
-   WHERE time_start > ?
-   ORDER BY time_start ASC
+   WHERE ts_start > ?
+   ORDER BY ts_start ASC
    LIMIT ?`
 );
 
-export const getByStart = db.prepare<[string], PriceRow | undefined>(
-  `SELECT price, time_start, time_end, zone, id FROM prices WHERE time_start = ?`
-);
+export function insertPrice(
+  zone: string,
+  price: number,
+  time_start_iso: string,
+  time_end_iso: string
+) {
+  // why: normalize to epoch to avoid offset issues in comparisons
+  const ts_start = Math.floor(new Date(time_start_iso).getTime() / 1000);
+  const ts_end = Math.floor(new Date(time_end_iso).getTime() / 1000);
+  return stmtInsert.run(
+    zone,
+    price,
+    time_start_iso,
+    time_end_iso,
+    ts_start,
+    ts_end
+  );
+}
+
+export function getLatest(limit: number): PriceRow[] {
+  return stmtLatest.all(limit) as PriceRow[];
+}
+
+export function getNextRows(nowEpochSec: number, limit: number): PriceRow[] {
+  return stmtNextRows.all(nowEpochSec, limit) as PriceRow[];
+}
 
 export default db;

@@ -6,8 +6,8 @@ dotenv.config();
 
 type ApiPrice = {
   NOK_per_kWh: number;
-  time_start: string; // ISO
-  time_end: string;   // ISO
+  time_start: string; // e.g. "2025-12-09T08:00:00+01:00"
+  time_end: string;
 };
 
 async function fetchPrices(): Promise<void> {
@@ -16,7 +16,7 @@ async function fetchPrices(): Promise<void> {
 
   let data: unknown;
   try {
-    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     data = await res.json();
   } catch (e) {
@@ -38,15 +38,11 @@ async function fetchPrices(): Promise<void> {
       typeof p?.time_start !== "string" ||
       typeof p?.time_end !== "string"
     ) {
-      continue; // skip bad rows
+      continue;
     }
-    try {
-      const info = insertPrice.run(zone, p.NOK_per_kWh, p.time_start, p.time_end);
-      inserted += info.changes ? 1 : 0;
-      ignored += info.changes ? 0 : 1;
-    } catch (e) {
-      console.error("Insert error:", e);
-    }
+    const info = insertPrice(zone, p.NOK_per_kWh, p.time_start, p.time_end);
+    inserted += info.changes ? 1 : 0;
+    ignored += info.changes ? 0 : 1;
   }
 
   console.log(`Saved prices: inserted=${inserted}, ignored=${ignored}`);
