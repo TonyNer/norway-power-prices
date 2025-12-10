@@ -228,7 +228,6 @@
   try {
     await loadThreshold();
     await refreshData();
-    setInterval(refreshData, 5000);
   } catch (e) {
     console.error(e);
     status.textContent = 'Error';
