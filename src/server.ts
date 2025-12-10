@@ -1,20 +1,26 @@
+// src/server.ts
 import express from "express";
-import TelegramBot from "node-telegram-bot-api";
-import { fetchPrices } from "./fetchPrices.js";
+import dotenv from "dotenv";
+import { getLatest, getNextRows } from "./db.js";
+dotenv.config();
 
 const app = express();
+app.use(express.static("public"));
 
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN!, { polling: true });
+app.get("/healthz", (_req, res) => res.json({ ok: true }));
 
-bot.on("message", (msg) => {
-  bot.sendMessage(msg.chat.id, "Welcome! Send /prices to get latest power prices.");
+app.get("/api/prices", (req, res) => {
+  const limit = Math.min(Number(req.query.limit ?? 24), 168) || 24;
+  const rows = getLatest.all(limit);
+  res.json(rows);
 });
 
-bot.onText(/\/prices/, async (msg) => {
-  const prices = await fetchPrices();
-  bot.sendMessage(msg.chat.id, JSON.stringify(prices, null, 2));
+app.get("/api/forecast", (req, res) => {
+  const hours = Math.min(Number(req.query.hours ?? 12), 48) || 12;
+  const nowIso = new Date().toISOString();
+  const rows = getNextRows.all(nowIso, hours);
+  res.json(rows);
 });
 
-app.listen(3000, () => {
-  console.log("Server running on port 3000");
-});
+const port = Number(process.env.PORT ?? 3000);
+app.listen(port, () => console.log(`Server running on port ${port}`));
