@@ -1,24 +1,26 @@
-import express, { type Request, type Response } from "express";
+import express from "express";
 import dotenv from "dotenv";
 import { getLatest, getNextRows } from "./db.js";
+
 dotenv.config();
 
 const app = express();
 app.use(express.static("public"));
 
-app.get("/healthz", (_req: Request, res: Response) => {
+app.get("/healthz", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/prices", (req: Request, res: Response) => {
-  const raw = (req.query as any)?.limit;
+app.get("/api/prices", (req, res) => {
+  // Avoid type collisions by treating query as unknown/any
+  const raw = (req as any)?.query?.limit;
   const n = Number(raw);
   const limit = Number.isFinite(n) ? Math.min(n, 168) : 24;
   res.json(getLatest(limit));
 });
 
-app.get("/api/forecast", (req: Request, res: Response) => {
-  const raw = (req.query as any)?.hours;
+app.get("/api/forecast", (req, res) => {
+  const raw = (req as any)?.query?.hours;
   const n = Number(raw);
   const hours = Number.isFinite(n) ? Math.min(n, 48) : 12;
   const nowEpoch = Math.floor(Date.now() / 1000);
