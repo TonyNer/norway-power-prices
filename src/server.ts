@@ -55,7 +55,7 @@ app.get("/api/threshold", (_req, res) => {
   res.json({ value: getPriceThreshold(defaultThreshold) });
 });
 
-app.post("/api/threshold", (req, res) => {
+app.post("/api/threshold", async (req, res) => {
   const raw = req.body?.value;
   const next = Number(raw);
   if (!Number.isFinite(next) || next <= 0) {
@@ -64,6 +64,22 @@ app.post("/api/threshold", (req, res) => {
   try {
     setPriceThreshold(next);
     res.json({ value: next });
+    const upcoming = getNextRows(Math.floor(Date.now() / 1000), 1)[0];
+    if (upcoming && upcoming.price <= next) {
+      const start = new Date(upcoming.ts_start * 1000);
+      const end = new Date(upcoming.ts_end * 1000);
+      const message = [
+        "ℹ️ *Threshold Updated*",
+        `New threshold: *${next.toFixed(2)} NOK/kWh*`,
+        `Next hour price ${upcoming.price.toFixed(2)} NOK/kWh is below threshold.`,
+        `Period: ${start.toLocaleString()} → ${end.toLocaleTimeString()}`
+      ].join("\n");
+      try {
+        await sendTelegram(message);
+      } catch (err) {
+        console.error("Failed to send threshold update Telegram message", err);
+      }
+    }
   } catch (err) {
     console.error("Failed to update threshold", err);
     res.status(500).json({ error: "Failed to update threshold" });
