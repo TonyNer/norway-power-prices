@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import dotenv from "dotenv";
+import { pathToFileURL } from "node:url";
 import { insertPrice } from "./db.js";
 dotenv.config();
 
@@ -9,7 +10,7 @@ type ApiPrice = {
   time_end: string;
 };
 
-async function fetchPrices(): Promise<void> {
+export async function fetchPrices(): Promise<void> {
   const zone = (process.env.ZONE || "NO4").toUpperCase();
   const now = new Date();
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -65,4 +66,13 @@ async function fetchPrices(): Promise<void> {
   console.log(`Saved prices: inserted=${inserted}, ignored=${ignored}`);
 }
 
-fetchPrices();
+const invokedViaCli =
+  Boolean(process.argv[1]) &&
+  import.meta.url === pathToFileURL(process.argv[1]!).href;
+
+if (invokedViaCli) {
+  fetchPrices().catch(err => {
+    console.error("Fetch failed:", err);
+    process.exit(1);
+  });
+}
