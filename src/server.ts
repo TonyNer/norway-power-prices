@@ -65,13 +65,13 @@ app.post("/api/threshold", async (req, res) => {
     setPriceThreshold(next);
     res.json({ value: next });
     const upcoming = getNextRows(Math.floor(Date.now() / 1000), 1)[0];
-    if (upcoming && upcoming.price <= next) {
+    if (upcoming && upcoming.price >= next) {
       const start = new Date(upcoming.ts_start * 1000);
       const end = new Date(upcoming.ts_end * 1000);
       const message = [
-        "ℹ️ *Threshold Updated*",
+        "⚠️ *Threshold Updated*",
         `New threshold: *${next.toFixed(2)} NOK/kWh*`,
-        `Next hour price ${upcoming.price.toFixed(2)} NOK/kWh is below threshold.`,
+        `Next hour price ${upcoming.price.toFixed(2)} NOK/kWh is above threshold.`,
         `Period: ${start.toLocaleString()} → ${end.toLocaleTimeString()}`
       ].join("\n");
       try {
