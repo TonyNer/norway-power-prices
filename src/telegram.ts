@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import dotenv from "dotenv";
+import { logNotification } from "./db.js";
 dotenv.config();
 
 const TOKEN = process.env.TELEGRAM_TOKEN;
@@ -26,4 +27,5 @@ export async function sendTelegram(msg: string): Promise<void> {
     const t = await res.text().catch(() => "");
     throw new Error(`Telegram send failed: ${res.status} ${t}`);
   }
+  logNotification(msg);
 }

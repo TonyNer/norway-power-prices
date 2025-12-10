@@ -1,6 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
-import { getLatest, getNextRows } from "./db.js";
+import { getLatest, getNextRows, getNotificationLogs } from "./db.js";
 import { fetchPrices } from "./fetchPrices.js";
 import { sendTelegram } from "./telegram.js";
 
@@ -27,6 +27,13 @@ app.get("/api/forecast", (req, res) => {
   const hours = Number.isFinite(n) ? Math.min(n, 48) : 12;
   const nowEpoch = Math.floor(Date.now() / 1000);
   res.json(getNextRows(nowEpoch, hours));
+});
+
+app.get("/api/notifications", (req, res) => {
+  const raw = (req as any)?.query?.limit;
+  const n = Number(raw);
+  const limit = Number.isFinite(n) ? Math.min(Math.max(n, 1), 100) : 10;
+  res.json(getNotificationLogs(limit));
 });
 
 const port = Number(process.env.PORT ?? 3000);

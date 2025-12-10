@@ -15,6 +15,13 @@ CREATE TABLE IF NOT EXISTS prices (
   UNIQUE(zone, ts_start)
 );
 CREATE INDEX IF NOT EXISTS idx_prices_ts_start ON prices(ts_start);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
 `);
 
 export type PriceRow = {
@@ -25,6 +32,12 @@ export type PriceRow = {
   time_end: string;
   ts_start: number;
   ts_end: number;
+};
+
+export type NotificationLog = {
+  id: number;
+  message: string;
+  created_at: number;
 };
 
 const stmtInsert = db.prepare(`
@@ -46,6 +59,17 @@ ORDER BY ts_start ASC
 LIMIT ?
 `);
 
+const stmtInsertNotification = db.prepare(`
+INSERT INTO notifications (message, created_at)
+VALUES (?, ?)
+`);
+
+const stmtGetNotifications = db.prepare(`
+SELECT * FROM notifications
+ORDER BY created_at DESC
+LIMIT ?
+`);
+
 export function insertPrice(
   zone: string,
   price: number,
@@ -63,6 +87,15 @@ export function getLatest(limit: number): PriceRow[] {
 
 export function getNextRows(nowEpochSec: number, limit: number): PriceRow[] {
   return stmtNext.all(nowEpochSec, limit) as PriceRow[];
+}
+
+export function logNotification(message: string): void {
+  const ts = Math.floor(Date.now() / 1000);
+  stmtInsertNotification.run(message, ts);
+}
+
+export function getNotificationLogs(limit: number): NotificationLog[] {
+  return stmtGetNotifications.all(limit) as NotificationLog[];
 }
 
 export default db;

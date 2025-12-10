@@ -38,7 +38,11 @@
     <div><strong>Next hour</strong> <div id="nextHour">—</div></div>
     <div style="margin-top:10px">
       <strong>Latest 24 entries</strong>
-      <ul id="latest" style="max-height:240px; overflow:auto;"></ul>
+      <ul id="latest" style="max-height:180px; overflow:auto;"></ul>
+    </div>
+    <div style="margin-top:10px">
+      <strong>Notifications</strong>
+      <ul id="notifications" style="max-height:140px; overflow:auto; font-size:.9rem;"></ul>
     </div>
     <div style="opacity:.7;margin-top:10px">API: <a href="/api/forecast?hours=12">/api/forecast</a></div>
   </aside>
@@ -51,17 +55,35 @@
   const thresholdEl = document.getElementById('threshold');
   const nextHourEl = document.getElementById('nextHour');
   const latestEl = document.getElementById('latest');
+  const notificationsEl = document.getElementById('notifications');
 
   const urlT = new URL(location.href);
   const threshold = Number(urlT.searchParams.get("threshold") || "1.0") || 1.0;
   thresholdEl.textContent = threshold.toFixed(2);
 
+  const escapeHtml = (str) =>
+    String(str).replace(/[&<>"']/g, c => {
+      switch (c) {
+        case "&": return "&amp;";
+        case "<": return "&lt;";
+        case ">": return "&gt;";
+        case '"': return "&quot;";
+        case "'": return "&#39;";
+        default: return c;
+      }
+    });
+
   try {
-    const [forecastRes, latestRes] = await Promise.all([
+    const [forecastRes, latestRes, notificationsRes] = await Promise.all([
       fetch('/api/forecast?hours=12'),
-      fetch('/api/prices?limit=24')
+      fetch('/api/prices?limit=24'),
+      fetch('/api/notifications?limit=10')
     ]);
-    const [forecast, latest] = await Promise.all([forecastRes.json(), latestRes.json()]);
+    const [forecast, latest, notifications] = await Promise.all([
+      forecastRes.json(),
+      latestRes.json(),
+      notificationsRes.json()
+    ]);
 
     if (forecast[0]) {
       const s = new Date(forecast[0].ts_start * 1000);
@@ -75,6 +97,17 @@
       const d = new Date(r.ts_start * 1000);
       return `<li>${d.toLocaleString()} — <strong>${Number(r.price).toFixed(2)}</strong> NOK/kWh</li>`;
     }).join('');
+
+    if (Array.isArray(notifications) && notifications.length) {
+      notificationsEl.innerHTML = notifications
+        .map(n => {
+          const ts = new Date(n.created_at * 1000).toLocaleString();
+          return `<li><strong>${ts}</strong><br>${escapeHtml(n.message)}</li>`;
+        })
+        .join('');
+    } else {
+      notificationsEl.innerHTML = "<li>No notifications logged yet.</li>";
+    }
 
     const ctx = document.getElementById('chart');
     const labels = forecast.map(r => new Date(r.ts_start * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
