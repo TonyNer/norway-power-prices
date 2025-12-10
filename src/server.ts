@@ -30,7 +30,8 @@ app.get("/api/forecast", (req, res) => {
 });
 
 const port = Number(process.env.PORT ?? 3000);
-const priceThreshold = Number(process.env.PRICE_THRESHOLD ?? 1.0);
+const rawThreshold = process.env.price_threshold ?? process.env.PRICE_THRESHOLD ?? "0.1";
+const priceThreshold = Number(rawThreshold);
 if (!Number.isFinite(priceThreshold)) {
   throw new Error("Invalid PRICE_THRESHOLD");
 }
