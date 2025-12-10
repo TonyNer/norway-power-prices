@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import { getLatest, getNextRows } from "./db.js";
 import { fetchPrices } from "./fetchPrices.js";
+import { sendTelegram } from "./telegram.js";
 
 dotenv.config();
 
@@ -30,6 +31,15 @@ app.get("/api/forecast", (req, res) => {
 
 const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => console.log(`Server running on port ${port}`));
+
+async function announceStartup(): Promise<void> {
+  try {
+    await sendTelegram("✅ power-notify container started and is running.");
+  } catch (err) {
+    console.error("Failed to send startup Telegram message", err);
+  }
+}
+announceStartup();
 
 const FETCH_INTERVAL_MS = Math.max(
   5 * 60 * 1000,
