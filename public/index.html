@@ -18,6 +18,11 @@
     canvas { width: 100%; height: 340px; }
     a { color: #8ab4ff; }
     ul { list-style: none; padding-left: 0; margin: 0; }
+    .threshold-form { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .threshold-form input { background: #0b0e13; border: 1px solid #374151; color: #e9eef5; border-radius: 6px; padding: 6px 10px; width: 120px; }
+    .threshold-form button { background: #2563eb; border: none; color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+    .threshold-form button[disabled] { opacity: 0.6; cursor: default; }
+    .threshold-hint { font-size: 0.85rem; opacity: 0.8; min-height: 1em; }
   </style>
 </head>
 <body>
@@ -30,9 +35,15 @@
   <section class="card">
     <h2 style="margin-top:0">Next 12 Hours</h2>
     <canvas id="chart"></canvas>
-    <div style="font-size:.9rem;opacity:.8">
-      Threshold: <strong id="threshold">1.00</strong> NOK/kWh
+    <div style="font-size:.9rem;opacity:.8;margin-top:10px">
+      Telegram threshold: <strong id="threshold">—</strong> NOK/kWh
     </div>
+    <form id="thresholdForm" class="threshold-form">
+      <label for="thresholdInput" style="font-size:.9rem;">Update threshold</label>
+      <input type="number" id="thresholdInput" step="0.01" min="0.01" required />
+      <button type="submit">Save</button>
+      <span id="thresholdMessage" class="threshold-hint"></span>
+    </form>
   </section>
   <aside class="card">
     <div><strong>Next hour</strong> <div id="nextHour">—</div></div>
@@ -53,13 +64,14 @@
 (async function(){
   const status = document.getElementById('status');
   const thresholdEl = document.getElementById('threshold');
+  const thresholdInput = document.getElementById('thresholdInput');
+  const thresholdForm = document.getElementById('thresholdForm');
+  const thresholdMessage = document.getElementById('thresholdMessage');
   const nextHourEl = document.getElementById('nextHour');
   const latestEl = document.getElementById('latest');
   const notificationsEl = document.getElementById('notifications');
-
-  const urlT = new URL(location.href);
-  const threshold = Number(urlT.searchParams.get("threshold") || "1.0") || 1.0;
-  thresholdEl.textContent = threshold.toFixed(2);
+  let activeThreshold = 1.0;
+  let priceChart = null;
 
   const escapeHtml = (str) =>
     String(str).replace(/[&<>"']/g, c => {
@@ -73,7 +85,26 @@
       }
     });
 
-  try {
+  function updateThresholdDisplay(value) {
+    const formatted = value.toFixed(2);
+    thresholdEl.textContent = formatted;
+    if (thresholdInput) {
+      thresholdInput.value = formatted;
+    }
+  }
+
+  async function loadThreshold() {
+    const res = await fetch('/api/threshold');
+    if (!res.ok) throw new Error("Failed to load threshold");
+    const data = await res.json();
+    const val = Number(data?.value);
+    if (Number.isFinite(val) && val > 0) {
+      activeThreshold = val;
+    }
+    updateThresholdDisplay(activeThreshold);
+  }
+
+  async function refreshData() {
     const [forecastRes, latestRes, notificationsRes] = await Promise.all([
       fetch('/api/forecast?hours=12'),
       fetch('/api/prices?limit=24'),
@@ -110,11 +141,18 @@
     }
 
     const ctx = document.getElementById('chart');
-    const labels = forecast.map(r => new Date(r.ts_start * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+    const labels = forecast.map(r =>
+      new Date(r.ts_start * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    );
     const values = forecast.map(r => r.price);
-    const lineColor = values.map(v => v > threshold ? 'rgba(239,68,68,0.9)' : 'rgba(59,130,246,0.9)');
+    const lineColor = values.map(v =>
+      v > activeThreshold ? 'rgba(239,68,68,0.9)' : 'rgba(59,130,246,0.9)'
+    );
 
-    new Chart(ctx, {
+    if (priceChart) {
+      priceChart.destroy();
+    }
+    priceChart = new Chart(ctx, {
       type: 'line',
       data: {
         labels,
@@ -133,11 +171,63 @@
       options: {
         responsive: true,
         plugins: { legend: { display: true }, tooltip: { mode: 'index', intersect: false } },
-        scales: { y: { beginAtZero: true, title: { display: true, text: 'NOK/kWh' } }, x: { title: { display: true, text: 'Hour' } } }
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'NOK/kWh' } },
+          x: { title: { display: true, text: 'Hour' } }
+        }
       }
     });
 
     status.textContent = 'Live';
+  }
+
+  function showThresholdMessage(text, isError = false) {
+    if (!thresholdMessage) return;
+    thresholdMessage.textContent = text;
+    thresholdMessage.style.color = isError ? '#f87171' : '#9ca3af';
+    if (text) {
+      setTimeout(() => {
+        thresholdMessage.textContent = "";
+      }, 4000);
+    }
+  }
+
+  thresholdForm?.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!thresholdInput) return;
+    const next = Number(thresholdInput.value);
+    if (!Number.isFinite(next) || next <= 0) {
+      showThresholdMessage("Enter a positive number", true);
+      return;
+    }
+    const button = thresholdForm.querySelector('button');
+    button?.setAttribute('disabled', 'true');
+    try {
+      const res = await fetch('/api/threshold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: next })
+      });
+      if (!res.ok) throw new Error("Failed to update threshold");
+      const data = await res.json();
+      const val = Number(data?.value);
+      if (Number.isFinite(val) && val > 0) {
+        activeThreshold = val;
+      }
+      updateThresholdDisplay(activeThreshold);
+      showThresholdMessage("Threshold updated");
+      await refreshData();
+    } catch (err) {
+      console.error(err);
+      showThresholdMessage("Failed to update threshold", true);
+    } finally {
+      button?.removeAttribute('disabled');
+    }
+  });
+
+  try {
+    await loadThreshold();
+    await refreshData();
   } catch (e) {
     console.error(e);
     status.textContent = 'Error';

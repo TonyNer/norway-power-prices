@@ -22,6 +22,11 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `);
 
 export type PriceRow = {
@@ -38,6 +43,10 @@ export type NotificationLog = {
   id: number;
   message: string;
   created_at: number;
+};
+
+type SettingRow = {
+  value: string;
 };
 
 const stmtInsert = db.prepare(`
@@ -70,6 +79,16 @@ ORDER BY created_at DESC
 LIMIT ?
 `);
 
+const stmtGetSetting = db.prepare(`
+SELECT value FROM settings WHERE key = ?
+`);
+
+const stmtUpsertSetting = db.prepare(`
+INSERT INTO settings (key, value)
+VALUES (?, ?)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value
+`);
+
 export function insertPrice(
   zone: string,
   price: number,
@@ -96,6 +115,34 @@ export function logNotification(message: string): void {
 
 export function getNotificationLogs(limit: number): NotificationLog[] {
   return stmtGetNotifications.all(limit) as NotificationLog[];
+}
+
+export function getSetting(key: string): string | undefined {
+  const row = stmtGetSetting.get(key) as SettingRow | undefined;
+  return row?.value;
+}
+
+export function setSetting(key: string, value: string): void {
+  stmtUpsertSetting.run(key, value);
+}
+
+const PRICE_THRESHOLD_KEY = "price_threshold";
+
+export function getPriceThreshold(defaultValue: number): number {
+  const stored = getSetting(PRICE_THRESHOLD_KEY);
+  const parsed = Number(stored);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  setPriceThreshold(defaultValue);
+  return defaultValue;
+}
+
+export function setPriceThreshold(value: number): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error("Invalid price threshold");
+  }
+  setSetting(PRICE_THRESHOLD_KEY, value.toString());
 }
 
 export default db;

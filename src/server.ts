@@ -1,6 +1,12 @@
 import express from "express";
 import dotenv from "dotenv";
-import { getLatest, getNextRows, getNotificationLogs } from "./db.js";
+import {
+  getLatest,
+  getNextRows,
+  getNotificationLogs,
+  getPriceThreshold,
+  setPriceThreshold
+} from "./db.js";
 import { fetchPrices } from "./fetchPrices.js";
 import { sendTelegram } from "./telegram.js";
 
@@ -8,6 +14,15 @@ dotenv.config();
 
 const app = express();
 app.use(express.static("public"));
+app.use(express.json());
+
+const port = Number(process.env.PORT ?? 3000);
+const rawThreshold = process.env.price_threshold ?? process.env.PRICE_THRESHOLD ?? "0.1";
+const defaultThreshold = Number(rawThreshold);
+if (!Number.isFinite(defaultThreshold) || defaultThreshold <= 0) {
+  throw new Error("Invalid PRICE_THRESHOLD");
+}
+getPriceThreshold(defaultThreshold);
 
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true });
@@ -36,12 +51,25 @@ app.get("/api/notifications", (req, res) => {
   res.json(getNotificationLogs(limit));
 });
 
-const port = Number(process.env.PORT ?? 3000);
-const rawThreshold = process.env.price_threshold ?? process.env.PRICE_THRESHOLD ?? "0.1";
-const priceThreshold = Number(rawThreshold);
-if (!Number.isFinite(priceThreshold)) {
-  throw new Error("Invalid PRICE_THRESHOLD");
-}
+app.get("/api/threshold", (_req, res) => {
+  res.json({ value: getPriceThreshold(defaultThreshold) });
+});
+
+app.post("/api/threshold", (req, res) => {
+  const raw = req.body?.value;
+  const next = Number(raw);
+  if (!Number.isFinite(next) || next <= 0) {
+    return res.status(400).json({ error: "Invalid threshold value" });
+  }
+  try {
+    setPriceThreshold(next);
+    res.json({ value: next });
+  } catch (err) {
+    console.error("Failed to update threshold", err);
+    res.status(500).json({ error: "Failed to update threshold" });
+  }
+});
+
 app.listen(port, () => console.log(`Server running on port ${port}`));
 
 async function announceStartup(): Promise<void> {
@@ -66,7 +94,8 @@ async function maybeNotifyHighPrice(): Promise<void> {
   if (!next) return;
   startupPriceChecked = true;
 
-  if (next.price <= priceThreshold) return;
+  const currentThreshold = getPriceThreshold(defaultThreshold);
+  if (next.price <= currentThreshold) return;
 
   const start = new Date(next.ts_start * 1000);
   const end = new Date(next.ts_end * 1000);
@@ -74,7 +103,7 @@ async function maybeNotifyHighPrice(): Promise<void> {
     "⚠️ *High Price Alert*",
     `Next hour: *${next.price.toFixed(2)} NOK/kWh*`,
     `Period: ${start.toLocaleString()} → ${end.toLocaleTimeString()}`,
-    `Above threshold (${priceThreshold.toFixed(2)} NOK/kWh)`
+    `Above threshold (${currentThreshold.toFixed(2)} NOK/kWh)`
   ].join("\n");
 
   try {
