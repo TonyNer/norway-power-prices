@@ -76,6 +76,7 @@ app.post("/api/threshold", async (req, res) => {
       ].join("\n");
       try {
         await sendTelegram(message);
+        lastHourlyAlertTs = upcoming.ts_start;
       } catch (err) {
         console.error("Failed to send threshold update Telegram message", err);
       }
@@ -102,22 +103,21 @@ const FETCH_INTERVAL_MS = Math.max(
   Number(process.env.FETCH_INTERVAL_MS ?? 60 * 60 * 1000)
 );
 let fetchInFlight = false;
-let startupPriceChecked = false;
+let lastHourlyAlertTs: number | null = null;
 
-async function maybeNotifyHighPrice(): Promise<void> {
-  if (startupPriceChecked) return;
+async function evaluateNextHourPrice(): Promise<void> {
   const next = getNextRows(Math.floor(Date.now() / 1000), 1)[0];
   if (!next) return;
-  startupPriceChecked = true;
-
   const currentThreshold = getPriceThreshold(defaultThreshold);
   if (next.price <= currentThreshold) return;
+  if (lastHourlyAlertTs === next.ts_start) return;
+  lastHourlyAlertTs = next.ts_start;
 
   const start = new Date(next.ts_start * 1000);
   const end = new Date(next.ts_end * 1000);
   const msg = [
     "⚠️ *High Price Alert*",
-    `Next hour: *${next.price.toFixed(2)} NOK/kWh*`,
+    `Upcoming hour: *${next.price.toFixed(2)} NOK/kWh*`,
     `Period: ${start.toLocaleString()} → ${end.toLocaleTimeString()}`,
     `Above threshold (${currentThreshold.toFixed(2)} NOK/kWh)`
   ].join("\n");
@@ -125,8 +125,19 @@ async function maybeNotifyHighPrice(): Promise<void> {
   try {
     await sendTelegram(msg);
   } catch (err) {
-    console.error("Failed to send startup price Telegram message", err);
+    console.error("Failed to send hourly price Telegram message", err);
   }
+}
+
+function scheduleHourlyChecks(): void {
+  const hourMs = 60 * 60 * 1000;
+  const delay = hourMs - (Date.now() % hourMs);
+  setTimeout(() => {
+    evaluateNextHourPrice().catch(err => console.error("Hourly check failed", err));
+    setInterval(() => {
+      evaluateNextHourPrice().catch(err => console.error("Hourly check failed", err));
+    }, hourMs);
+  }, delay);
 }
 
 async function runFetchCycle(): Promise<void> {
@@ -134,7 +145,6 @@ async function runFetchCycle(): Promise<void> {
   fetchInFlight = true;
   try {
     await fetchPrices();
-    await maybeNotifyHighPrice();
   } catch (err) {
     console.error("Price fetch failed", err);
   } finally {
@@ -144,3 +154,4 @@ async function runFetchCycle(): Promise<void> {
 
 runFetchCycle();
 setInterval(runFetchCycle, FETCH_INTERVAL_MS);
+scheduleHourlyChecks();
